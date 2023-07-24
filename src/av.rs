@@ -7,12 +7,18 @@ pub enum TimeSeriesStep {
     Weekly,
     Monthly
 }
+pub enum AvDatatype {
+    Json,
+    Csv,
+    None
+}
+
 pub enum AvFunctionCall {
     TimeSeries{
         step: TimeSeriesStep,
         symbol: String,
         outputsize: Option<String>, // compact || full
-        datatype: Option<String>, // json || csv
+        datatype: AvDatatype,
         api_key: String,
     }, 
 }
@@ -45,7 +51,19 @@ impl AvFunctionCall {
                 }
     
                 // append query symbol
-                let symbol_query = format!("&symbol={symbol}");
+                // rm class a/b tags
+
+                let mut symbol_param = symbol.to_lowercase();
+                if symbol_param.contains('(') {
+                    let start_i = symbol_param.find('(').unwrap();
+                    // println!("PAR START: {}", start_i);
+                    symbol_param = symbol_param[..start_i].trim().to_string();
+                }
+
+                if symbol_param.contains('.') {
+                    symbol_param = symbol_param.replace('.', "-");
+                }
+                let symbol_query = format!("&symbol={}", symbol_param);
                 query_url.push_str(&symbol_query);
     
                 // append outputsize
@@ -79,11 +97,15 @@ impl AvFunctionCall {
                 
                 // append datatype
                 match datatype {
-                    Some(val) => {
-                        let dtype_query = format!("&datatype={val}");
-                        query_url.push_str(&dtype_query);
+                    AvDatatype::Csv => {
+                        let size_query = "&datatype=csv";
+                        query_url.push_str(size_query);
                     }
-                    None => {}
+                    AvDatatype::Json => {
+                        let size_query = "&datatype=json";
+                        query_url.push_str(size_query);
+                    }
+                    AvDatatype::None => {}
                 }
     
                 // append apikey
@@ -96,6 +118,31 @@ impl AvFunctionCall {
 
     pub fn print_built_url(&self) {
         println!("{:?}", self.build_url())
+    }
+
+    /// Builds URL and requests data from AlphaVantage
+    pub async fn send_request(&self) -> Result<DataFrame> {
+        let formatted_url = self.build_url();
+        match formatted_url {
+            Ok(url) => {
+                let resp = snp500_data::request::basic(&url).await
+                    .expect(format!("Err on av api call, url called: {}", url).as_str());
+                        // println!("AV RESP: {}", resp);
+                let formatted = time_series_parser(resp);
+
+                match formatted {
+                    Ok(ret_data) => {
+                        return Ok(ret_data);
+                    }
+                    Err(e) => {
+                        return Err(anyhow!("Error building url: {}", e));
+                    } 
+                }
+            }
+            Err(e) => {
+                return Err(anyhow!("Error building url: {}", e));
+            }
+        }
     }
 }
 

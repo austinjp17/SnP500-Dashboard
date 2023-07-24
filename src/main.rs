@@ -1,4 +1,6 @@
 
+use std::str::FromStr;
+
 use snp500_data;
 use polars_core::prelude::*;
 
@@ -14,23 +16,38 @@ async fn main() {
 
     let key = "8FCG2UU0IWQHWH6G".to_string(); // TODO: abstract api key out
 
-    let symbols = data.column("symbol")
-        .unwrap()
-        .iter().nth(2).unwrap();
+    use polars::datatypes::AnyValue::Utf8;
+    let symbol_col = data.column("symbol").unwrap();
+    symbol_col.utf8().expect("Not strings?");
+    for elem in symbol_col.iter() {
+        match elem {
+            Utf8(symbol) => {
+
+                println!("--- {} ---", symbol);
+
+                let query = av::AvFunctionCall::TimeSeries { 
+                    step: av::TimeSeriesStep::Daily, 
+                    symbol: String::from_str(symbol).unwrap(), 
+                    outputsize: None, 
+                    datatype: av::AvDatatype::Csv, 
+                    api_key: "8FCG2UU0IWQHWH6G".to_string(),
+                };
+
+                let data = query.send_request().await.unwrap();
+                println!("{}", data.head(Some(5)));
+            }
+            _ => {println!("Err")}
+        }
+    };
     
-    for i in 0..20 {
+    // for i in 0..20 {
         
-        let symbol = data.select(["symbol"]).unwrap();
-        use polars::datatypes::AnyValue::Utf8;
-        symbol.iter().for_each(|sym| {
-            println!("{:?}", sym.as_list());
-        });
         
         // let query = av::AvFunctionCall::TimeSeries { 
         //     step: av::TimeSeriesStep::Daily, 
         //     symbol: symbol.to_string(), 
         //     outputsize: None, 
-        //     datatype: Some(String::from("csv")), 
+        //     datatype: av::AvDatatype::Csv, 
         //     api_key: "8FCG2UU0IWQHWH6G".to_string(),
         // };
 
@@ -43,7 +60,7 @@ async fn main() {
 
         // let data = av::time_series_parser(resp);
         
-    }
+    // }
     // println!("{:?}", data.head(Some(5)));
     
 }
