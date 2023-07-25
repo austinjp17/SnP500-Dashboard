@@ -1,6 +1,9 @@
 use polars_core::prelude::*;
 use anyhow::{Result, anyhow};
 use chrono::NaiveDate;
+use polars::datatypes::AnyValue::Utf8;
+use polars::datatypes::AnyValue::UInt32;
+use std::{str::FromStr};
 
 pub enum TimeSeriesStep {
     Daily,
@@ -134,11 +137,29 @@ impl AvFunctionCall {
         let formatted_url = self.build_url();
         match formatted_url {
             Ok(url) => {
-                println!("{}", url);
-                let resp = snp500_data::request::basic(&url).await
-                    .expect(format!("Err on av api call, url called: {}", url).as_str());
+                // println!("{}", url);
+                let mut recieved: bool = false;
+                let mut resp_data = String::new();
+                for i in 0..2 {
+                    let resp = snp500_data::request::basic(&url).await;
+                    match resp {
+                        Ok(data) => {
+                            recieved = true;
+                            resp_data = data;
+                        }
+                        Err(e) => {
+                            if i == 2 {
+                                return Err(anyhow!("API Call Error: {}", e));
+                            }
+                        }
+                    }
+                    if recieved{
+                        break;
+                    }
+                }
+                
                         // println!("AV RESP: {}", resp);
-                let formatted = csv_time_series_parser(resp);
+                let formatted = csv_time_series_parser(resp_data);
 
                 match formatted {
                     Ok(ret_data) => {
@@ -156,6 +177,29 @@ impl AvFunctionCall {
     }
 }
 
+pub async fn get_comp_data(symb_obj: AnyValue<'_>) -> Result<DataFrame>  {
+    match symb_obj {
+        Utf8(symbol) => {
+
+            // println!("--- {} ---", symbol);
+
+            let query = AvFunctionCall::TimeSeries { 
+                step: TimeSeriesStep::Daily, 
+                symbol: String::from_str(symbol).unwrap(), 
+                outputsize: AvOutputSize::Full, 
+                datatype: AvDatatype::Csv, 
+                api_key: "8FCG2UU0IWQHWH6G".to_string(),
+            };
+
+            let data = query.send_request().await.unwrap();
+            // println!("{}", data.head(Some(5)));
+            return Ok(data);
+        }
+        _ => {
+            return Err(anyhow!("Error getting {}", symb_obj));
+    }};
+    
+}
 
 pub fn csv_time_series_parser(csv_str: String) -> Result<DataFrame> {
     // df col initialization
@@ -164,19 +208,24 @@ pub fn csv_time_series_parser(csv_str: String) -> Result<DataFrame> {
     let mut highs:Vec<f64> = vec![];
     let mut lows:Vec<f64> = vec![];
     let mut closes:Vec<f64> = vec![];
-    let mut volumns:Vec<i32> = vec![];
+    let mut volumns:Vec<u32> = vec![];
 
     let mut rdr = csv::Reader::from_reader(csv_str.as_bytes());
     for row in rdr.records() {
         match row {
             Ok(data) => {
-                println!("{:?}", data);
-                timestamps_str.push(data.get(0).unwrap().to_string());
-                opens.push(data.get(1).unwrap().parse().unwrap());
-                highs.push(data.get(2).unwrap().parse().unwrap());
-                lows.push(data.get(3).unwrap().parse().unwrap());
-                closes.push(data.get(4).unwrap().parse().unwrap());
-                volumns.push(data.get(5).unwrap().parse().unwrap());
+                // println!("{:?}", data);
+                if data.len() > 2{
+                    timestamps_str.push(data.get(0).unwrap().to_string());
+                    opens.push(data.get(1).unwrap().parse().unwrap());
+                    highs.push(data.get(2).unwrap().parse().unwrap());
+                    lows.push(data.get(3).unwrap().parse().unwrap());
+                    closes.push(data.get(4).unwrap().parse().unwrap());
+                    volumns.push(data.get(5).unwrap().parse().unwrap());
+                } else {
+                    return Err(anyhow!("Error parsing line: {:?}", data));
+                }
+                
             }
             Err(e) => {
                 println!("Err parsing csv to vecs");
