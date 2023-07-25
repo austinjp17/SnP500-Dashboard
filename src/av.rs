@@ -1,6 +1,9 @@
 use polars_core::prelude::*;
 use anyhow::{Result, anyhow};
 use chrono::NaiveDate;
+use std::{str::FromStr, collections::HashMap, hash::Hash};
+
+use polars::datatypes::AnyValue::Utf8;
 
 pub enum TimeSeriesStep {
     Daily,
@@ -134,7 +137,7 @@ impl AvFunctionCall {
         let formatted_url = self.build_url();
         match formatted_url {
             Ok(url) => {
-                println!("{}", url);
+                // println!("{}", url);
                 let resp = snp500_data::request::basic(&url).await
                     .expect(format!("Err on av api call, url called: {}", url).as_str());
                         // println!("AV RESP: {}", resp);
@@ -156,6 +159,27 @@ impl AvFunctionCall {
     }
 }
 
+pub async fn get_comp_data(symb_obj: AnyValue<'_>) -> Result<DataFrame>  {
+    match symb_obj {
+        Utf8(symbol) => {
+            // println!("--- {} ---", symbol);
+
+            let query = AvFunctionCall::TimeSeries { 
+                step: TimeSeriesStep::Daily, 
+                symbol: String::from_str(symbol).unwrap(), 
+                outputsize: AvOutputSize::Compact, 
+                datatype: AvDatatype::Csv, 
+                api_key: "8FCG2UU0IWQHWH6G".to_string(),
+            };
+
+            let data = query.send_request().await.unwrap();
+            // println!("{}", data.head(Some(5)));
+            return Ok(data);
+        }
+        _ => {
+            return Err(anyhow!("Error getting {}", symb_obj));
+    }};
+}
 
 pub fn csv_time_series_parser(csv_str: String) -> Result<DataFrame> {
     // df col initialization
@@ -170,7 +194,7 @@ pub fn csv_time_series_parser(csv_str: String) -> Result<DataFrame> {
     for row in rdr.records() {
         match row {
             Ok(data) => {
-                println!("{:?}", data);
+                // println!("{:?}", data);
                 timestamps_str.push(data.get(0).unwrap().to_string());
                 opens.push(data.get(1).unwrap().parse().unwrap());
                 highs.push(data.get(2).unwrap().parse().unwrap());
