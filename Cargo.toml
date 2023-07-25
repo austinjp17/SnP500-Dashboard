@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 # snp500_data = "0.2.0"
 snp500_data = {path = "../snp500-data-retrieval"}
+# snp500_data = {path = "../get_snp_data"}
 tokio = { version = "1", features = ["full"] }
 polars-core = {version = "0.31.1", features = ["rows"]}
 polars = {version = "0.31.1", features = ["object"]}
