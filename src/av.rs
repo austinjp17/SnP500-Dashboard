@@ -12,12 +12,17 @@ pub enum AvDatatype {
     Csv,
     None
 }
+pub enum AvOutputSize {
+    Compact,
+    Full,
+    None
+}
 
 pub enum AvFunctionCall {
     TimeSeries{
         step: TimeSeriesStep,
         symbol: String,
-        outputsize: Option<String>, // compact || full
+        outputsize: AvOutputSize, // compact || full
         datatype: AvDatatype,
         api_key: String,
     }, 
@@ -43,10 +48,10 @@ impl AvFunctionCall {
                         query_url.push_str("function=TIME_SERIES_DAILY");
                     },
                     TimeSeriesStep::Weekly => {
-                        query_url.push_str("function=TIME_SERIES_WEEKLY");
+                        query_url.push_str("function=TIME_SERIES_WEEKLY_ADJUSTED");
                     },
                     TimeSeriesStep::Monthly => {
-                        query_url.push_str("function=TIME_SERIES_MONTHLY");
+                        query_url.push_str("function=TIME_SERIES_MONTHLY_ADJUSTED");
                     }
                 }
     
@@ -70,28 +75,32 @@ impl AvFunctionCall {
                 match step {
                     TimeSeriesStep::Daily => {
                         match outputsize {
-                            Some(val) => {
-                                let size_query = format!("&outputsize={val}");
+                            AvOutputSize::Compact => {
+                                let size_query = format!("&outputsize=compact");
                                 query_url.push_str(&size_query);
                             }
-                            None => {}
+                            AvOutputSize::Full => {
+                                let size_query = format!("&outputsize=full");
+                                query_url.push_str(&size_query);
+                            }
+                            _ => {}
                         }
                     }
                     TimeSeriesStep::Weekly => {
-                        match outputsize {
-                            Some(_) => {
-                                println!("Output size param not used for Weekly query.");
-                            }
-                            None => {}
-                        }
+                        // match outputsize {
+                        //     Some(_) => {
+                        //         println!("Output size param not used for Weekly query.");
+                        //     }
+                        //     None => {}
+                        // }
                     }
                     TimeSeriesStep::Monthly => {
-                        match outputsize {
-                            Some(_) => {
-                                println!("Output size param not used for Monthly query.");
-                            }
-                            None => {}
-                        }
+                    //     match outputsize {
+                    //         Some(_) => {
+                    //             println!("Output size param not used for Monthly query.");
+                    //         }
+                    //         None => {}
+                    //     }
                     }
                 }
                 
@@ -125,10 +134,11 @@ impl AvFunctionCall {
         let formatted_url = self.build_url();
         match formatted_url {
             Ok(url) => {
+                println!("{}", url);
                 let resp = snp500_data::request::basic(&url).await
                     .expect(format!("Err on av api call, url called: {}", url).as_str());
                         // println!("AV RESP: {}", resp);
-                let formatted = time_series_parser(resp);
+                let formatted = csv_time_series_parser(resp);
 
                 match formatted {
                     Ok(ret_data) => {
@@ -147,7 +157,7 @@ impl AvFunctionCall {
 }
 
 
-pub fn time_series_parser(csv_str: String) -> Result<DataFrame> {
+pub fn csv_time_series_parser(csv_str: String) -> Result<DataFrame> {
     // df col initialization
     let mut timestamps_str = vec![];
     let mut opens:Vec<f64> = vec![];
@@ -160,6 +170,7 @@ pub fn time_series_parser(csv_str: String) -> Result<DataFrame> {
     for row in rdr.records() {
         match row {
             Ok(data) => {
+                println!("{:?}", data);
                 timestamps_str.push(data.get(0).unwrap().to_string());
                 opens.push(data.get(1).unwrap().parse().unwrap());
                 highs.push(data.get(2).unwrap().parse().unwrap());
