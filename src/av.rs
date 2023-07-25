@@ -208,7 +208,7 @@ pub fn csv_time_series_parser(csv_str: String) -> Result<DataFrame> {
     let mut highs:Vec<f64> = vec![];
     let mut lows:Vec<f64> = vec![];
     let mut closes:Vec<f64> = vec![];
-    let mut volumns:Vec<u32> = vec![];
+    let mut volumns:Vec<f64> = vec![];
 
     let mut rdr = csv::Reader::from_reader(csv_str.as_bytes());
     for row in rdr.records() {
@@ -258,6 +258,6 @@ pub fn csv_time_series_parser(csv_str: String) -> Result<DataFrame> {
     // println!("{:?}", data.unwrap().sample_n(10, false, true, None));
     
 
-    Ok(data.unwrap())
+    Ok(data.unwrap().reverse())
 }
 
